@@ -1,0 +1,10 @@
+project_id = "hpnzpwczlntacirpghcc"
+
+[functions.elder-companion]
+verify_jwt = false
+
+[functions.voice-to-text]
+verify_jwt = false
+
+[functions.text-to-speech]
+verify_jwt = false
