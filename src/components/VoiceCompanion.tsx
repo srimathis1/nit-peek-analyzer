@@ -1,43 +1,119 @@
 import { useState, useRef } from "react";
-import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export const VoiceCompanion = () => {
+  const [isInCall, setIsInCall] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  const [currentMessage, setCurrentMessage] = useState("");
+  const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const startCall = async () => {
+    try {
+      setIsInCall(true);
+      setConversationHistory([]);
+      
+      toast({
+        title: "Call Connected",
+        description: "Your companion is ready to talk with you",
+      });
+
+      // Start with a warm greeting
+      await processAIResponse("Hello! It's wonderful to hear from you. How are you feeling today?", []);
+      
+      // Auto-start listening after greeting plays
+      setTimeout(() => {
+        if (isInCall) {
+          startListening();
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('Error starting call:', error);
+      toast({
+        title: "Error",
+        description: "Could not start call",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const endCall = () => {
+    // Stop any ongoing recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    // Close audio context
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    
+    setIsInCall(false);
+    setIsListening(false);
+    setIsSpeaking(false);
+    setCurrentMessage("");
+    setConversationHistory([]);
+    
+    toast({
+      title: "Call Ended",
+      description: "Take care! Call anytime you need someone to talk to.",
+    });
+  };
 
   const startListening = async () => {
+    if (!isInCall) return;
+    
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        await processAudio(audioBlob);
+        processAudio(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
       setIsListening(true);
+      setCurrentMessage("Listening...");
       
-      toast({
-        title: "Listening...",
-        description: "Speak to your elder companion",
-      });
+      // Auto-stop after 10 seconds for natural conversation flow
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+          setIsListening(false);
+        }
+      }, 10000);
     } catch (error) {
+      console.error('Error accessing microphone:', error);
       toast({
         title: "Error",
         description: "Could not access microphone",
@@ -46,22 +122,19 @@ export const VoiceCompanion = () => {
     }
   };
 
-  const stopListening = () => {
-    if (mediaRecorderRef.current && isListening) {
-      mediaRecorderRef.current.stop();
-      setIsListening(false);
-    }
-  };
-
   const processAudio = async (audioBlob: Blob) => {
+    if (!isInCall) return;
+    
     try {
-      // Convert audio to base64
+      setCurrentMessage("Processing your message...");
+      
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
+      
       reader.onloadend = async () => {
         const base64Audio = reader.result?.toString().split(',')[1];
         
-        // Transcribe audio
+        // Transcribe user's voice
         const { data: transcriptionData, error: transcriptionError } = await supabase.functions.invoke(
           'voice-to-text',
           { body: { audio: base64Audio } }
@@ -69,55 +142,105 @@ export const VoiceCompanion = () => {
 
         if (transcriptionError) throw transcriptionError;
 
-        const userText = transcriptionData.text;
-        setTranscript(userText);
+        const userMessage = transcriptionData.text;
+        setCurrentMessage(`You: ${userMessage}`);
+        
+        // Add to conversation history
+        const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
+        setConversationHistory(updatedHistory);
 
-        // Get AI response
+        // Get AI response with conversation context
         const { data: aiData, error: aiError } = await supabase.functions.invoke(
           'elder-companion',
-          { body: { message: userText } }
+          { 
+            body: { 
+              message: userMessage,
+              conversationHistory: updatedHistory
+            }
+          }
         );
 
         if (aiError) throw aiError;
 
         const aiResponse = aiData.response;
-
-        // Convert response to speech
-        const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
-          'text-to-speech',
-          { body: { text: aiResponse, voice: 'nova' } }
-        );
-
-        if (ttsError) throw ttsError;
-
-        // Play audio response
-        const audioData = atob(ttsData.audioContent);
-        const arrayBuffer = new ArrayBuffer(audioData.length);
-        const view = new Uint8Array(arrayBuffer);
-        for (let i = 0; i < audioData.length; i++) {
-          view[i] = audioData.charCodeAt(i);
-        }
-
-        const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-
-        setIsSpeaking(true);
-        audio.onended = () => setIsSpeaking(false);
-        await audio.play();
-
-        toast({
-          title: "Companion Response",
-          description: aiResponse,
-        });
+        await processAIResponse(aiResponse, updatedHistory);
       };
     } catch (error) {
       console.error('Error processing audio:', error);
+      setCurrentMessage("Sorry, I couldn't understand that. Could you say that again?");
       toast({
         title: "Error",
         description: "Failed to process your message",
         variant: "destructive",
       });
+      
+      // Auto-restart listening after error
+      setTimeout(() => {
+        if (isInCall) {
+          startListening();
+        }
+      }, 2000);
+    }
+  };
+
+  const processAIResponse = async (aiResponse: string, history: Message[]) => {
+    if (!isInCall) return;
+    
+    try {
+      setCurrentMessage(`Companion: ${aiResponse}`);
+      
+      // Add AI response to history
+      setConversationHistory([...history, { role: 'assistant' as const, content: aiResponse }]);
+
+      // Convert to speech
+      const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
+        'text-to-speech',
+        { body: { text: aiResponse, voice: 'nova' } }
+      );
+
+      if (ttsError) throw ttsError;
+
+      // Play audio
+      setIsSpeaking(true);
+      
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      
+      const audioData = atob(ttsData.audioContent);
+      const arrayBuffer = new ArrayBuffer(audioData.length);
+      const view = new Uint8Array(arrayBuffer);
+      for (let i = 0; i < audioData.length; i++) {
+        view[i] = audioData.charCodeAt(i);
+      }
+
+      const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        
+        // Auto-start listening for next response after a short pause
+        setTimeout(() => {
+          if (isInCall) {
+            startListening();
+          }
+        }, 1000);
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.error('Error in AI response:', error);
+      setIsSpeaking(false);
+      
+      // Try to continue conversation even after error
+      setTimeout(() => {
+        if (isInCall) {
+          startListening();
+        }
+      }, 2000);
     }
   };
 
@@ -126,43 +249,51 @@ export const VoiceCompanion = () => {
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${isSpeaking ? 'bg-primary animate-pulse' : 'bg-muted'}`} />
-            <span className="font-medium text-sm">Elder Companion</span>
+            <div className={`w-3 h-3 rounded-full ${
+              isSpeaking ? 'bg-green-500 animate-pulse' : 
+              isListening ? 'bg-blue-500 animate-pulse' : 
+              isInCall ? 'bg-yellow-500' : 
+              'bg-muted'
+            }`} />
+            <span className="font-medium text-sm">
+              {isInCall ? 'On Call' : 'Voice Companion'}
+            </span>
           </div>
-          {isSpeaking && <Volume2 className="w-4 h-4 text-primary animate-pulse" />}
         </div>
         
-        {transcript && (
-          <div className="mb-3 p-2 bg-muted rounded text-xs">
-            <p className="text-muted-foreground">You said:</p>
-            <p className="text-foreground">{transcript}</p>
+        {currentMessage && (
+          <div className="mb-3 p-3 bg-muted/50 rounded-lg min-h-[60px]">
+            <p className="text-xs text-foreground">
+              {currentMessage}
+            </p>
           </div>
         )}
 
         <div className="flex gap-2">
-          {!isListening ? (
+          {!isInCall ? (
             <Button
-              onClick={startListening}
+              onClick={startCall}
               className="flex-1 bg-gradient-medical text-primary-foreground"
-              disabled={isSpeaking}
             >
-              <Mic className="w-4 h-4 mr-2" />
-              Talk to Companion
+              <Phone className="w-4 h-4 mr-2" />
+              Start Call
             </Button>
           ) : (
             <Button
-              onClick={stopListening}
+              onClick={endCall}
               variant="destructive"
               className="flex-1"
             >
-              <MicOff className="w-4 h-4 mr-2" />
-              Stop Listening
+              <PhoneOff className="w-4 h-4 mr-2" />
+              End Call
             </Button>
           )}
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Your AI companion is here to chat and keep you company
+          {isInCall 
+            ? "Speak naturally - I'm here to listen and talk with you" 
+            : "Call anytime you need someone to talk to"}
         </p>
       </CardContent>
     </Card>
