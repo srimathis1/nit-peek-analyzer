@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, badge: 0 },
-  { title: "AI Insights", url: "/ai-insights", icon: Mic, badge: 0 },
+  { title: "Smart Health", url: "/ai-insights", icon: Mic, badge: 0 },
   { title: "Appointments", url: "/appointments", icon: Calendar, badge: 3 },
   { title: "Medications", url: "/medications", icon: Pill, badge: 2 },
   { title: "Patient Profile", url: "/profile", icon: User, badge: 0 },

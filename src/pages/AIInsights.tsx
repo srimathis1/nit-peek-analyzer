@@ -108,7 +108,7 @@ export default function AIInsights() {
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Brain className="w-7 h-7 text-primary" />
-            AI Health Insights
+            Smart Health
           </h1>
           <p className="text-sm text-muted-foreground">Personalized health analysis powered by AI</p>
         </div>
