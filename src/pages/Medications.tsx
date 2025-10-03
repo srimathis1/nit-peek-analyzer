@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pill, Clock, AlertCircle, Plus, Camera, Mic } from "lucide-react";
+import { Pill, Clock, AlertCircle, Plus, Mic } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MedicationUpload } from "@/components/MedicationUpload";
 
 export default function Medications() {
   const medications = [
@@ -166,10 +167,7 @@ export default function Medications() {
                   <Mic className="w-4 h-4 mr-2" />
                   Voice Reminder
                 </Button>
-                <Button size="sm" variant="outline" className="flex-1">
-                  <Camera className="w-4 h-4 mr-2" />
-                  Upload Photo
-                </Button>
+                <MedicationUpload />
               </div>
             </CardContent>
           </Card>

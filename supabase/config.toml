@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.ai-health-insights]
 verify_jwt = false
+
+[functions.extract-medication]
+verify_jwt = false

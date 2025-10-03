@@ -134,21 +134,38 @@ export const VoiceCompanion = () => {
       reader.onloadend = async () => {
         const base64Audio = reader.result?.toString().split(',')[1];
         
+        console.log('Starting transcription...');
+        
         // Transcribe user's voice
         const { data: transcriptionData, error: transcriptionError } = await supabase.functions.invoke(
           'voice-to-text',
           { body: { audio: base64Audio } }
         );
 
-        if (transcriptionError) throw transcriptionError;
+        if (transcriptionError) {
+          console.error('Transcription error:', transcriptionError);
+          throw transcriptionError;
+        }
 
+        console.log('Transcription result:', transcriptionData);
         const userMessage = transcriptionData.text;
+        
+        if (!userMessage || userMessage.trim().length === 0) {
+          console.log('No speech detected, restarting listening');
+          setTimeout(() => {
+            if (isInCall) startListening();
+          }, 1000);
+          return;
+        }
+        
         setCurrentMessage(`You: ${userMessage}`);
         
         // Add to conversation history
         const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
         setConversationHistory(updatedHistory);
 
+        console.log('Getting AI response...');
+        
         // Get AI response with conversation context
         const { data: aiData, error: aiError } = await supabase.functions.invoke(
           'elder-companion',
@@ -160,8 +177,12 @@ export const VoiceCompanion = () => {
           }
         );
 
-        if (aiError) throw aiError;
+        if (aiError) {
+          console.error('AI error:', aiError);
+          throw aiError;
+        }
 
+        console.log('AI response:', aiData);
         const aiResponse = aiData.response;
         await processAIResponse(aiResponse, updatedHistory);
       };
@@ -187,18 +208,26 @@ export const VoiceCompanion = () => {
     if (!isInCall) return;
     
     try {
+      console.log('Processing AI response:', aiResponse);
       setCurrentMessage(`Companion: ${aiResponse}`);
       
       // Add AI response to history
       setConversationHistory([...history, { role: 'assistant' as const, content: aiResponse }]);
 
+      console.log('Converting to speech...');
+      
       // Convert to speech
       const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
         'text-to-speech',
         { body: { text: aiResponse, voice: 'nova' } }
       );
 
-      if (ttsError) throw ttsError;
+      if (ttsError) {
+        console.error('TTS error:', ttsError);
+        throw ttsError;
+      }
+
+      console.log('Speech generated, playing audio...');
 
       // Play audio
       setIsSpeaking(true);
@@ -218,22 +247,40 @@ export const VoiceCompanion = () => {
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        setTimeout(() => {
+          if (isInCall) startListening();
+        }, 1000);
+      };
+
       audio.onended = () => {
+        console.log('Audio playback completed');
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
         
         // Auto-start listening for next response after a short pause
         setTimeout(() => {
           if (isInCall) {
+            console.log('Restarting listening...');
             startListening();
           }
         }, 1000);
       };
 
       await audio.play();
+      console.log('Audio playing...');
     } catch (error) {
       console.error('Error in AI response:', error);
       setIsSpeaking(false);
+      
+      toast({
+        title: "Error",
+        description: "Failed to generate voice response",
+        variant: "destructive",
+      });
       
       // Try to continue conversation even after error
       setTimeout(() => {
