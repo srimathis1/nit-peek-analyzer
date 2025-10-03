@@ -144,11 +144,15 @@ export const VoiceCompanion = () => {
 
         if (transcriptionError) {
           console.error('Transcription error:', transcriptionError);
-          throw transcriptionError;
+          setCurrentMessage("Sorry, I couldn't hear that clearly. Please try again.");
+          setTimeout(() => {
+            if (isInCall) startListening();
+          }, 2000);
+          return;
         }
 
         console.log('Transcription result:', transcriptionData);
-        const userMessage = transcriptionData.text;
+        const userMessage = transcriptionData?.text;
         
         if (!userMessage || userMessage.trim().length === 0) {
           console.log('No speech detected, restarting listening');
@@ -179,11 +183,15 @@ export const VoiceCompanion = () => {
 
         if (aiError) {
           console.error('AI error:', aiError);
-          throw aiError;
+          setCurrentMessage("Sorry, I'm having trouble thinking right now. Let me try again.");
+          setTimeout(() => {
+            if (isInCall) startListening();
+          }, 2000);
+          return;
         }
 
         console.log('AI response:', aiData);
-        const aiResponse = aiData.response;
+        const aiResponse = aiData?.response;
         await processAIResponse(aiResponse, updatedHistory);
       };
     } catch (error) {
@@ -224,7 +232,16 @@ export const VoiceCompanion = () => {
 
       if (ttsError) {
         console.error('TTS error:', ttsError);
-        throw ttsError;
+        setCurrentMessage(`Companion: ${aiResponse} (Note: Voice playback unavailable)`);
+        toast({
+          title: "Voice Error",
+          description: "I can understand you, but my voice isn't working. Check the text instead.",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          if (isInCall) startListening();
+        }, 3000);
+        return;
       }
 
       console.log('Speech generated, playing audio...');
