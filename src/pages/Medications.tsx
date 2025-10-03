@@ -4,6 +4,8 @@ import { Progress } from "@/components/ui/progress";
 import { Pill, Clock, AlertCircle, Plus, Mic } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MedicationUpload } from "@/components/MedicationUpload";
+import { useMemo, useState } from "react";
+import { useVoiceReminder } from "@/hooks/useVoiceReminder";
 
 export default function Medications() {
   const medications = [
@@ -50,6 +52,52 @@ export default function Medications() {
       status: "active"
     },
   ];
+
+  const { scheduleReminders, cancelReminders } = useVoiceReminder();
+  const [enabledReminders, setEnabledReminders] = useState<Record<number, boolean>>({});
+
+  const parseTimeToDate = (timeStr: string) => {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null as any;
+    let hour = parseInt(match[1], 10);
+    const minute = parseInt(match[2], 10);
+    const ap = match[3].toUpperCase();
+    if (ap === 'PM' && hour !== 12) hour += 12;
+    if (ap === 'AM' && hour === 12) hour = 0;
+    const d = new Date();
+    d.setHours(hour, minute, 0, 0);
+    return d;
+  };
+
+  const scheduleForMedication = (med: any) => {
+    const today = new Date();
+    const starts = med.startDate ? new Date(med.startDate) : today;
+    if (starts > today) {
+      // Not started yet, nothing to schedule
+      scheduleReminders([], `med-${med.id}`);
+      return;
+    }
+    const items = (med.times || [])
+      .map((t: string) => parseTimeToDate(t))
+      .filter((d: Date | null) => d && d.getTime() > Date.now())
+      .map((d: Date) => ({
+        at: d,
+        message: `It's time to take ${med.name} ${med.dosage}. ${med.instructions || ''}`.trim(),
+      }));
+    scheduleReminders(items, `med-${med.id}`);
+  };
+
+  const onToggleReminder = (med: any) => {
+    const key = med.id as number;
+    const group = `med-${key}`;
+    if (enabledReminders[key]) {
+      cancelReminders(group);
+      setEnabledReminders(prev => ({ ...prev, [key]: false }));
+    } else {
+      scheduleForMedication(med);
+      setEnabledReminders(prev => ({ ...prev, [key]: true }));
+    }
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -163,9 +211,14 @@ export default function Medications() {
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button size="sm" variant="outline" className="flex-1">
+                <Button
+                  size="sm"
+                  variant={enabledReminders[med.id] ? "secondary" : "outline"}
+                  className="flex-1"
+                  onClick={() => onToggleReminder(med)}
+                >
                   <Mic className="w-4 h-4 mr-2" />
-                  Voice Reminder
+                  {enabledReminders[med.id] ? "Disable Voice Reminder" : "Enable Voice Reminder"}
                 </Button>
                 <MedicationUpload />
               </div>

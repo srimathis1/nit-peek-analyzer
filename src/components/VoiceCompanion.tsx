@@ -21,6 +21,29 @@ export const VoiceCompanion = () => {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  // Browser TTS fallback without API key
+  const speakWithWebSpeech = (text: string) =>
+    new Promise<void>((resolve) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        resolve();
+        return;
+      }
+      setIsSpeaking(true);
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = navigator.language || 'en-US';
+      utter.rate = 1;
+      utter.pitch = 1;
+      utter.onend = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+      utter.onerror = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+      window.speechSynthesis.speak(utter);
+    });
+
   const startCall = async () => {
     try {
       setIsInCall(true);
@@ -231,16 +254,11 @@ export const VoiceCompanion = () => {
       );
 
       if (ttsError) {
-        console.error('TTS error:', ttsError);
-        setCurrentMessage(`Companion: ${aiResponse} (Note: Voice playback unavailable)`);
-        toast({
-          title: "Voice Error",
-          description: "I can understand you, but my voice isn't working. Check the text instead.",
-          variant: "destructive",
-        });
+        console.error('TTS error, using browser voice fallback:', ttsError);
+        await speakWithWebSpeech(aiResponse);
         setTimeout(() => {
           if (isInCall) startListening();
-        }, 3000);
+        }, 500);
         return;
       }
 
@@ -264,13 +282,14 @@ export const VoiceCompanion = () => {
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
-      audio.onerror = (e) => {
-        console.error('Audio playback error:', e);
+      audio.onerror = async (e) => {
+        console.error('Audio playback error, using browser voice fallback:', e);
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
+        await speakWithWebSpeech(aiResponse);
         setTimeout(() => {
           if (isInCall) startListening();
-        }, 1000);
+        }, 500);
       };
 
       audio.onended = () => {
