@@ -1,9 +1,12 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Phone, PhoneOff, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+
+// Browser-based Speech Recognition
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -17,49 +20,79 @@ export default function VoiceAssistant() {
   const [currentMessage, setCurrentMessage] = useState("");
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const { toast } = useToast();
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const recognitionRef = useState<any>(null)[0];
 
-  const speakWithWebSpeech = (text: string) =>
-    new Promise<void>((resolve) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+  // Initialize speech recognition
+  useEffect(() => {
+    if (!SpeechRecognition) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in this browser. Please use Chrome or Edge.",
+        variant: "destructive",
+      });
+    }
+  }, []);
+
+  const speak = (text: string) => {
+    return new Promise<void>((resolve) => {
+      if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
+      
+      window.speechSynthesis.cancel(); // Cancel any ongoing speech
       setIsSpeaking(true);
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = navigator.language || 'en-US';
-      utter.rate = 1;
-      utter.pitch = 1;
-      utter.onend = () => {
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      
+      utterance.onend = () => {
         setIsSpeaking(false);
         resolve();
       };
-      utter.onerror = () => {
+      
+      utterance.onerror = () => {
         setIsSpeaking(false);
         resolve();
       };
-      window.speechSynthesis.speak(utter);
+      
+      window.speechSynthesis.speak(utterance);
     });
+  };
 
   const startCall = async () => {
+    if (!SpeechRecognition) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in this browser",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsInCall(true);
       setConversationHistory([]);
       
       toast({
         title: "Call Connected",
-        description: "Your companion is ready to talk with you",
+        description: "Start speaking after the greeting!",
       });
 
-      await processAIResponse("Hello! It's wonderful to hear from you. How are you feeling today?", []);
+      const greeting = "Hello! It's wonderful to hear from you. How are you feeling today?";
+      setCurrentMessage(`Companion: ${greeting}`);
       
+      await speak(greeting);
+      
+      // Start listening after greeting
       setTimeout(() => {
         if (isInCall) {
           startListening();
         }
-      }, 3000);
+      }, 500);
     } catch (error) {
       console.error('Error starting call:', error);
       toast({
@@ -67,23 +100,25 @@ export default function VoiceAssistant() {
         description: "Could not start call",
         variant: "destructive",
       });
+      setIsInCall(false);
     }
   };
 
   const endCall = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+    if (recognitionRef) {
+      try {
+        recognitionRef.stop();
+      } catch (e) {
+        console.log('Recognition already stopped');
+      }
     }
     
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
+    window.speechSynthesis.cancel();
     
     setIsInCall(false);
     setIsListening(false);
     setIsSpeaking(false);
     setCurrentMessage("");
-    setConversationHistory([]);
     
     toast({
       title: "Call Ended",
@@ -91,209 +126,129 @@ export default function VoiceAssistant() {
     });
   };
 
-  const startListening = async () => {
-    if (!isInCall) return;
+  const startListening = () => {
+    if (!isInCall || !SpeechRecognition) return;
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
-      });
-      
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      recognition.onstart = () => {
+        setIsListening(true);
+        setCurrentMessage("Listening... Speak now!");
+        console.log('Started listening...');
+      };
+
+      recognition.onresult = async (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Heard:', transcript);
+        
+        setIsListening(false);
+        setCurrentMessage(`You: ${transcript}`);
+        
+        // Process the user's message
+        await handleUserMessage(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Recognition error:', event.error);
+        setIsListening(false);
+        
+        if (event.error === 'no-speech') {
+          setCurrentMessage("I didn't hear anything. Try again!");
+          setTimeout(() => {
+            if (isInCall) startListening();
+          }, 1500);
+        } else {
+          toast({
+            title: "Error",
+            description: "Could not understand. Please try again.",
+            variant: "destructive",
+          });
+          setTimeout(() => {
+            if (isInCall) startListening();
+          }, 2000);
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        processAudio(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
+      recognition.onend = () => {
+        setIsListening(false);
+        console.log('Recognition ended');
       };
 
-      mediaRecorder.start();
-      setIsListening(true);
-      setCurrentMessage("Listening...");
-      
-      setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          mediaRecorderRef.current.stop();
-          setIsListening(false);
-        }
-      }, 10000);
+      recognition.start();
+      recognitionRef.current = recognition;
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      console.error('Error starting recognition:', error);
       toast({
         title: "Error",
-        description: "Could not access microphone",
+        description: "Could not start listening",
         variant: "destructive",
       });
     }
   };
 
-  const processAudio = async (audioBlob: Blob) => {
-    if (!isInCall) return;
+  const handleUserMessage = async (userMessage: string) => {
+    if (!isInCall || !userMessage.trim()) return;
     
     try {
-      setCurrentMessage("Processing your message...");
+      setCurrentMessage("Thinking...");
       
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
+      const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
+      setConversationHistory(updatedHistory);
       
-      reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(',')[1];
-        
-        const { data: transcriptionData, error: transcriptionError } = await supabase.functions.invoke(
-          'voice-to-text',
-          { body: { audio: base64Audio } }
-        );
-
-        if (transcriptionError) {
-          console.error('Transcription error:', transcriptionError);
-          setCurrentMessage("Sorry, I couldn't hear that clearly. Please try again.");
-          setTimeout(() => {
-            if (isInCall) startListening();
-          }, 2000);
-          return;
-        }
-
-        const userMessage = transcriptionData?.text;
-        
-        if (!userMessage || userMessage.trim().length === 0) {
-          setTimeout(() => {
-            if (isInCall) startListening();
-          }, 1000);
-          return;
-        }
-        
-        setCurrentMessage(`You: ${userMessage}`);
-        
-        const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
-        setConversationHistory(updatedHistory);
-        
-        const { data: aiData, error: aiError } = await supabase.functions.invoke(
-          'elder-companion',
-          { 
-            body: { 
-              message: userMessage,
-              conversationHistory: updatedHistory
-            }
+      // Get AI response
+      const { data: aiData, error: aiError } = await supabase.functions.invoke(
+        'elder-companion',
+        { 
+          body: { 
+            message: userMessage,
+            conversationHistory: updatedHistory
           }
-        );
-
-        if (aiError) {
-          console.error('AI error:', aiError);
-          setCurrentMessage("Sorry, I'm having trouble thinking right now. Let me try again.");
-          setTimeout(() => {
-            if (isInCall) startListening();
-          }, 2000);
-          return;
         }
-
-        const aiResponse = aiData?.response;
-        await processAIResponse(aiResponse, updatedHistory);
-      };
-    } catch (error) {
-      console.error('Error processing audio:', error);
-      setCurrentMessage("Sorry, I couldn't understand that. Could you say that again?");
-      
-      setTimeout(() => {
-        if (isInCall) {
-          startListening();
-        }
-      }, 2000);
-    }
-  };
-
-  const processAIResponse = async (aiResponse: string, history: Message[]) => {
-    if (!isInCall) return;
-    
-    try {
-      setCurrentMessage(`Companion: ${aiResponse}`);
-      
-      setConversationHistory([...history, { role: 'assistant' as const, content: aiResponse }]);
-      
-      // Prefer browser TTS for zero-dependency voice
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        await speakWithWebSpeech(aiResponse);
-        setTimeout(() => {
-          if (isInCall) startListening();
-        }, 500);
-        return;
-      }
-
-      const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
-        'text-to-speech',
-        { body: { text: aiResponse, voice: 'nova' } }
       );
 
-      if (ttsError || !ttsData?.audioContent) {
-        console.error('TTS error, using browser voice fallback:', ttsError);
-        await speakWithWebSpeech(aiResponse);
+      if (aiError) {
+        console.error('AI error:', aiError);
+        const fallbackResponse = "I'm here with you. Could you say that again?";
+        setCurrentMessage(`Companion: ${fallbackResponse}`);
+        await speak(fallbackResponse);
+        
         setTimeout(() => {
           if (isInCall) startListening();
         }, 500);
         return;
       }
 
-      setIsSpeaking(true);
+      const aiResponse = aiData?.response || "I'm listening. Please continue.";
       
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
-      }
+      // Update conversation
+      setConversationHistory([...updatedHistory, { role: 'assistant' as const, content: aiResponse }]);
+      setCurrentMessage(`Companion: ${aiResponse}`);
       
-      const audioData = atob(ttsData.audioContent);
-      const arrayBuffer = new ArrayBuffer(audioData.length);
-      const view = new Uint8Array(arrayBuffer);
-      for (let i = 0; i < audioData.length; i++) {
-        view[i] = audioData.charCodeAt(i);
-      }
-
-      const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      audio.onerror = async (e) => {
-        console.error('Audio playback error, using browser voice fallback:', e);
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        await speakWithWebSpeech(aiResponse);
-        setTimeout(() => {
-          if (isInCall) startListening();
-        }, 500);
-      };
-
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        
-        setTimeout(() => {
-          if (isInCall) {
-            startListening();
-          }
-        }, 1000);
-      };
-
-      await audio.play();
+      // Speak the response
+      await speak(aiResponse);
+      
+      // Continue listening
+      setTimeout(() => {
+        if (isInCall) startListening();
+      }, 500);
+      
     } catch (error) {
-      console.error('Error in AI response:', error);
-      setIsSpeaking(false);
+      console.error('Error processing message:', error);
+      const errorResponse = "Sorry, I had a moment there. What were you saying?";
+      setCurrentMessage(`Companion: ${errorResponse}`);
+      await speak(errorResponse);
       
       setTimeout(() => {
-        if (isInCall) {
-          startListening();
-        }
-      }, 2000);
+        if (isInCall) startListening();
+      }, 500);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background p-6">
