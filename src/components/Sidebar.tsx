@@ -1,4 +1,4 @@
-import { Calendar, Pill, User, Bell, Settings, LayoutDashboard, Mic } from "lucide-react";
+import { Calendar, Pill, User, Bell, Settings, LayoutDashboard, Mic, Phone } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, badge: 0 },
+  { title: "Voice Assistant", url: "/voice-assistant", icon: Phone, badge: 0 },
   { title: "Smart Health", url: "/ai-insights", icon: Mic, badge: 0 },
   { title: "Appointments", url: "/appointments", icon: Calendar, badge: 3 },
   { title: "Medications", url: "/medications", icon: Pill, badge: 2 },

@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import AIInsights from "./pages/AIInsights";
+import VoiceAssistant from "./pages/VoiceAssistant";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
             <main className="flex-1">
               <Routes>
                 <Route path="/" element={<DashboardContent />} />
+                <Route path="/voice-assistant" element={<VoiceAssistant />} />
                 <Route path="/ai-insights" element={<AIInsights />} />
                 <Route path="/appointments" element={<Appointments />} />
                 <Route path="/medications" element={<Medications />} />
