@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/Sidebar";
 import { DashboardContent } from "@/components/DashboardContent";
-import { VoiceCompanion } from "@/components/VoiceCompanion";
+
 import Appointments from "./pages/Appointments";
 import Medications from "./pages/Medications";
 import Profile from "./pages/Profile";
@@ -40,7 +40,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
-            <VoiceCompanion />
+            
           </div>
         </SidebarProvider>
       </BrowserRouter>

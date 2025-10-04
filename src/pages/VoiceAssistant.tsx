@@ -221,12 +221,21 @@ export default function VoiceAssistant() {
       
       setConversationHistory([...history, { role: 'assistant' as const, content: aiResponse }]);
       
+      // Prefer browser TTS for zero-dependency voice
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        await speakWithWebSpeech(aiResponse);
+        setTimeout(() => {
+          if (isInCall) startListening();
+        }, 500);
+        return;
+      }
+
       const { data: ttsData, error: ttsError } = await supabase.functions.invoke(
         'text-to-speech',
         { body: { text: aiResponse, voice: 'nova' } }
       );
 
-      if (ttsError) {
+      if (ttsError || !ttsData?.audioContent) {
         console.error('TTS error, using browser voice fallback:', ttsError);
         await speakWithWebSpeech(aiResponse);
         setTimeout(() => {
