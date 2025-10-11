@@ -21,6 +21,7 @@ export default function VoiceAssistant() {
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const { toast } = useToast();
   const recognitionRef = useRef<any>(null);
+  const isInCallRef = useRef<boolean>(false);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -39,96 +40,70 @@ export default function VoiceAssistant() {
         resolve();
         return;
       }
-      
-      window.speechSynthesis.cancel(); // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
       setIsSpeaking(true);
-      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
       utterance.rate = 0.9;
       utterance.pitch = 1;
       utterance.volume = 1;
-      
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        resolve();
-      };
-      
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        resolve();
-      };
-      
+      utterance.onend = () => { setIsSpeaking(false); resolve(); };
+      utterance.onerror = () => { setIsSpeaking(false); resolve(); };
       window.speechSynthesis.speak(utterance);
     });
   };
 
   const startCall = async () => {
     if (!SpeechRecognition) {
-      toast({
-        title: "Not Supported",
-        description: "Speech recognition is not supported in this browser",
-        variant: "destructive",
-      });
+      toast({ title: "Not Supported", description: "Speech recognition is not supported in this browser", variant: "destructive" });
       return;
     }
 
     try {
+      // Request mic permission upfront so the browser shows the prompt immediately
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        toast({ title: "Microphone blocked", description: "Please allow mic access in your browser and try again.", variant: "destructive" });
+        return;
+      }
+
       setIsInCall(true);
+      isInCallRef.current = true;
       setConversationHistory([]);
-      
-      toast({
-        title: "Call Connected",
-        description: "Start speaking after the greeting!",
-      });
+
+      toast({ title: "Call Connected", description: "Start speaking after the greeting!" });
 
       const greeting = "Hello! It's wonderful to hear from you. How are you feeling today?";
       setCurrentMessage(`Companion: ${greeting}`);
-      
       await speak(greeting);
-      
+
       // Start listening after greeting
-      setTimeout(() => {
-        if (isInCall) {
-          startListening();
-        }
-      }, 500);
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
     } catch (error) {
       console.error('Error starting call:', error);
-      toast({
-        title: "Error",
-        description: "Could not start call",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Could not start call", variant: "destructive" });
       setIsInCall(false);
+      isInCallRef.current = false;
     }
   };
 
   const endCall = () => {
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        console.log('Recognition already stopped');
-      }
+      try { recognitionRef.current.stop(); } catch (e) { console.log('Recognition already stopped'); }
     }
-    
     window.speechSynthesis.cancel();
-    
+    isInCallRef.current = false;
     setIsInCall(false);
     setIsListening(false);
     setIsSpeaking(false);
     setCurrentMessage("");
-    
-    toast({
-      title: "Call Ended",
-      description: "Take care! Call anytime you need someone to talk to.",
-    });
+    toast({ title: "Call Ended", description: "Take care! Call anytime you need someone to talk to." });
   };
 
   const startListening = () => {
-    if (!isInCall || !SpeechRecognition) return;
-    
+    if (!isInCallRef.current || !SpeechRecognition) return;
+
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
@@ -145,32 +120,20 @@ export default function VoiceAssistant() {
       recognition.onresult = async (event: any) => {
         const transcript = event.results[0][0].transcript;
         console.log('Heard:', transcript);
-        
         setIsListening(false);
         setCurrentMessage(`You: ${transcript}`);
-        
-        // Process the user's message
         await handleUserMessage(transcript);
       };
 
       recognition.onerror = (event: any) => {
         console.error('Recognition error:', event.error);
         setIsListening(false);
-        
         if (event.error === 'no-speech') {
           setCurrentMessage("I didn't hear anything. Try again!");
-          setTimeout(() => {
-            if (isInCall) startListening();
-          }, 1500);
+          setTimeout(() => { if (isInCallRef.current) startListening(); }, 1200);
         } else {
-          toast({
-            title: "Error",
-            description: "Could not understand. Please try again.",
-            variant: "destructive",
-          });
-          setTimeout(() => {
-            if (isInCall) startListening();
-          }, 2000);
+          toast({ title: "Error", description: "Could not understand. Please try again.", variant: "destructive" });
+          setTimeout(() => { if (isInCallRef.current) startListening(); }, 1500);
         }
       };
 
@@ -183,72 +146,45 @@ export default function VoiceAssistant() {
       recognitionRef.current = recognition;
     } catch (error) {
       console.error('Error starting recognition:', error);
-      toast({
-        title: "Error",
-        description: "Could not start listening",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Could not start listening", variant: "destructive" });
     }
   };
 
   const handleUserMessage = async (userMessage: string) => {
-    if (!isInCall || !userMessage.trim()) return;
-    
+    if (!isInCallRef.current || !userMessage.trim()) return;
+
     try {
       setCurrentMessage("Thinking...");
-      
       const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
       setConversationHistory(updatedHistory);
-      
+
       // Get AI response
-      const { data: aiData, error: aiError } = await supabase.functions.invoke(
-        'elder-companion',
-        { 
-          body: { 
-            message: userMessage,
-            conversationHistory: updatedHistory
-          }
-        }
-      );
+      const { data: aiData, error: aiError } = await supabase.functions.invoke('elder-companion', {
+        body: { message: userMessage, conversationHistory: updatedHistory }
+      });
 
       if (aiError) {
         console.error('AI error:', aiError);
         const fallbackResponse = "I'm here with you. Could you say that again?";
         setCurrentMessage(`Companion: ${fallbackResponse}`);
         await speak(fallbackResponse);
-        
-        setTimeout(() => {
-          if (isInCall) startListening();
-        }, 500);
+        setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
         return;
       }
 
       const aiResponse = aiData?.response || "I'm listening. Please continue.";
-      
-      // Update conversation
       setConversationHistory([...updatedHistory, { role: 'assistant' as const, content: aiResponse }]);
       setCurrentMessage(`Companion: ${aiResponse}`);
-      
-      // Speak the response
       await speak(aiResponse);
-      
-      // Continue listening
-      setTimeout(() => {
-        if (isInCall) startListening();
-      }, 500);
-      
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
     } catch (error) {
       console.error('Error processing message:', error);
       const errorResponse = "Sorry, I had a moment there. What were you saying?";
       setCurrentMessage(`Companion: ${errorResponse}`);
       await speak(errorResponse);
-      
-      setTimeout(() => {
-        if (isInCall) startListening();
-      }, 500);
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
     }
   };
-
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -306,21 +242,12 @@ export default function VoiceAssistant() {
 
             <div className="flex gap-4 justify-center">
               {!isInCall ? (
-                <Button
-                  onClick={startCall}
-                  size="lg"
-                  className="bg-gradient-medical text-primary-foreground px-8"
-                >
+                <Button onClick={startCall} size="lg" className="bg-gradient-medical text-primary-foreground px-8">
                   <Phone className="w-5 h-5 mr-2" />
                   Start Voice Call
                 </Button>
               ) : (
-                <Button
-                  onClick={endCall}
-                  variant="destructive"
-                  size="lg"
-                  className="px-8"
-                >
+                <Button onClick={endCall} variant="destructive" size="lg" className="px-8">
                   <PhoneOff className="w-5 h-5 mr-2" />
                   End Call
                 </Button>
