@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Phone, PhoneOff, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +20,7 @@ export default function VoiceAssistant() {
   const [currentMessage, setCurrentMessage] = useState("");
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const { toast } = useToast();
-  const recognitionRef = useState<any>(null)[0];
+  const recognitionRef = useRef<any>(null);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -105,9 +105,9 @@ export default function VoiceAssistant() {
   };
 
   const endCall = () => {
-    if (recognitionRef) {
+    if (recognitionRef.current) {
       try {
-        recognitionRef.stop();
+        recognitionRef.current.stop();
       } catch (e) {
         console.log('Recognition already stopped');
       }
