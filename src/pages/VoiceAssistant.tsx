@@ -1,188 +1,266 @@
-"use client";
+import { useState, useEffect, useRef } from "react";
+import { Phone, PhoneOff, Mic } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-import React, { useState, useRef } from "react";
-import { Mic, PhoneOff } from "lucide-react";
+// Browser-based Speech Recognition
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-// ✅ Replace this with your real Hugging Face token
-const HF_API_KEY = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export default function VoiceAssistant() {
+  const [isInCall, setIsInCall] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isInCall, setIsInCall] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState<
-    { role: string; content: string }[]
-  >([]);
-  const isInCallRef = useRef(false);
+  const [currentMessage, setCurrentMessage] = useState("");
+  const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
+  const { toast } = useToast();
+  const recognitionRef = useRef<any>(null);
+  const isInCallRef = useRef<boolean>(false);
 
-  // 🎙️ SpeechRecognition setup
-  const SpeechRecognition =
-    window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = "en-US";
+  // Initialize speech recognition
+  useEffect(() => {
+    if (!SpeechRecognition) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in this browser. Please use Chrome or Edge.",
+        variant: "destructive",
+      });
+    }
+  }, []);
 
-  // 🔊 Speak text aloud
   const speak = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      if (isInCallRef.current) {
-        setTimeout(() => startListening(), 800);
+    return new Promise<void>((resolve) => {
+      if (!('speechSynthesis' in window)) {
+        resolve();
+        return;
       }
-    };
-    speechSynthesis.speak(utterance);
+      window.speechSynthesis.cancel();
+      setIsSpeaking(true);
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onend = () => { setIsSpeaking(false); resolve(); };
+      utterance.onerror = () => { setIsSpeaking(false); resolve(); };
+      window.speechSynthesis.speak(utterance);
+    });
   };
 
-  // 🧠 Ask AI through Hugging Face
-  const askAI = async (message: string) => {
-    try {
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inputs: `${conversationHistory
-              .map((m) => `${m.role}: ${m.content}`)
-              .join("\n")}\nuser: ${message}\nassistant:`,
-            parameters: { max_new_tokens: 150 },
-          }),
-        }
-      );
-
-      const result = await response.json();
-      console.log("HF result:", result);
-
-      const aiReply =
-        result?.[0]?.generated_text?.split("assistant:").pop()?.trim() ||
-        "I'm here. Please continue.";
-
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: "assistant", content: aiReply },
-      ]);
-      speak(aiReply);
-    } catch (err) {
-      console.error("AI fetch error:", err);
-      speak("Sorry, something went wrong. Please try again.");
+  const startCall = async () => {
+    if (!SpeechRecognition) {
+      toast({ title: "Not Supported", description: "Speech recognition is not supported in this browser", variant: "destructive" });
+      return;
     }
-  };
-
-  // 🗣️ Start listening
-  const startListening = () => {
-    if (!isInCallRef.current) return;
 
     try {
-      recognition.start();
-      setIsListening(true);
-      console.log("Listening...");
-    } catch (err) {
-      console.warn("Recognizer start error:", err);
-    }
-  };
+      // Request mic permission upfront so the browser shows the prompt immediately
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        toast({ title: "Microphone blocked", description: "Please allow mic access in your browser and try again.", variant: "destructive" });
+        return;
+      }
 
-  // 🔁 Recognition events
-  recognition.onresult = (event: any) => {
-    const transcript = event.results[0][0].transcript;
-    console.log("Heard:", transcript);
-
-    setConversationHistory((prev) => [
-      ...prev,
-      { role: "user", content: transcript },
-    ]);
-    setIsListening(false);
-    recognition.stop();
-    askAI(transcript);
-  };
-
-  recognition.onerror = (e: any) => {
-    console.error("Speech error:", e.error);
-    setIsListening(false);
-    if (isInCallRef.current && !isSpeaking) {
-      setTimeout(() => startListening(), 1500);
-    }
-  };
-
-  recognition.onend = () => {
-    console.log("Recognition ended");
-    setIsListening(false);
-    if (isInCallRef.current && !isSpeaking) {
-      setTimeout(() => startListening(), 1000);
-    }
-  };
-
-  // 📞 Start or stop call
-  const toggleCall = () => {
-    if (isInCall) {
-      isInCallRef.current = false;
-      setIsInCall(false);
-      recognition.stop();
-      speechSynthesis.cancel();
-      setIsListening(false);
-      setIsSpeaking(false);
-      console.log("Call ended");
-    } else {
-      isInCallRef.current = true;
       setIsInCall(true);
+      isInCallRef.current = true;
       setConversationHistory([]);
-      console.log("Call started");
-      startListening();
-      speak("Hello, I am your AI companion. How are you today?");
+
+      toast({ title: "Call Connected", description: "Start speaking after the greeting!" });
+
+      const greeting = "Hello! It's wonderful to hear from you. How are you feeling today?";
+      setCurrentMessage(`Companion: ${greeting}`);
+      await speak(greeting);
+
+      // Start listening after greeting
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
+    } catch (error) {
+      console.error('Error starting call:', error);
+      toast({ title: "Error", description: "Could not start call", variant: "destructive" });
+      setIsInCall(false);
+      isInCallRef.current = false;
+    }
+  };
+
+  const endCall = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) { console.log('Recognition already stopped'); }
+    }
+    window.speechSynthesis.cancel();
+    isInCallRef.current = false;
+    setIsInCall(false);
+    setIsListening(false);
+    setIsSpeaking(false);
+    setCurrentMessage("");
+    toast({ title: "Call Ended", description: "Take care! Call anytime you need someone to talk to." });
+  };
+
+  const startListening = () => {
+    if (!isInCallRef.current || !SpeechRecognition) return;
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setCurrentMessage("Listening... Speak now!");
+        console.log('Started listening...');
+      };
+
+      recognition.onresult = async (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Heard:', transcript);
+        setIsListening(false);
+        setCurrentMessage(`You: ${transcript}`);
+        await handleUserMessage(transcript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'no-speech') {
+          setCurrentMessage("I didn't hear anything. Try again!");
+          setTimeout(() => { if (isInCallRef.current) startListening(); }, 1200);
+        } else {
+          toast({ title: "Error", description: "Could not understand. Please try again.", variant: "destructive" });
+          setTimeout(() => { if (isInCallRef.current) startListening(); }, 1500);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        console.log('Recognition ended');
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (error) {
+      console.error('Error starting recognition:', error);
+      toast({ title: "Error", description: "Could not start listening", variant: "destructive" });
+    }
+  };
+
+  const handleUserMessage = async (userMessage: string) => {
+    if (!isInCallRef.current || !userMessage.trim()) return;
+
+    try {
+      setCurrentMessage("Thinking...");
+      const updatedHistory = [...conversationHistory, { role: 'user' as const, content: userMessage }];
+      setConversationHistory(updatedHistory);
+
+      // Get AI response
+      const { data: aiData, error: aiError } = await supabase.functions.invoke('elder-companion', {
+        body: { message: userMessage, conversationHistory: updatedHistory }
+      });
+
+      if (aiError) {
+        console.error('AI error:', aiError);
+        const fallbackResponse = "I'm here with you. Could you say that again?";
+        setCurrentMessage(`Companion: ${fallbackResponse}`);
+        await speak(fallbackResponse);
+        setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
+        return;
+      }
+
+      const aiResponse = aiData?.response || "I'm listening. Please continue.";
+      setConversationHistory([...updatedHistory, { role: 'assistant' as const, content: aiResponse }]);
+      setCurrentMessage(`Companion: ${aiResponse}`);
+      await speak(aiResponse);
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
+    } catch (error) {
+      console.error('Error processing message:', error);
+      const errorResponse = "Sorry, I had a moment there. What were you saying?";
+      setCurrentMessage(`Companion: ${errorResponse}`);
+      await speak(errorResponse);
+      setTimeout(() => { if (isInCallRef.current) startListening(); }, 500);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 text-white">
-      <div
-        className={`relative flex items-center justify-center w-48 h-48 rounded-full transition-all ${
-          isListening ? "bg-green-500/20 scale-110" : "bg-gray-700/20"
-        }`}
-      >
-        {isInCall ? (
-          <button
-            onClick={toggleCall}
-            className="absolute w-20 h-20 bg-red-600 rounded-full flex items-center justify-center text-white hover:bg-red-700 transition-all"
-          >
-            <PhoneOff size={32} />
-          </button>
-        ) : (
-          <button
-            onClick={toggleCall}
-            className="absolute w-20 h-20 bg-green-600 rounded-full flex items-center justify-center text-white hover:bg-green-700 transition-all"
-          >
-            <Mic size={32} />
-          </button>
-        )}
-      </div>
+    <div className="min-h-screen bg-background p-6">
+      <div className="max-w-4xl mx-auto">
+        <Card className="border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mic className="w-6 h-6 text-primary" />
+              Voice Assistant
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-center">
+              <div className={`w-32 h-32 rounded-full flex items-center justify-center ${
+                isSpeaking ? 'bg-green-500/20 animate-pulse' : 
+                isListening ? 'bg-blue-500/20 animate-pulse' : 
+                isInCall ? 'bg-yellow-500/20' : 
+                'bg-muted'
+              }`}>
+                <Mic className={`w-16 h-16 ${
+                  isSpeaking ? 'text-green-500' : 
+                  isListening ? 'text-blue-500' : 
+                  isInCall ? 'text-yellow-500' : 
+                  'text-muted-foreground'
+                }`} />
+              </div>
+            </div>
 
-      <div className="mt-8 text-center">
-        {isInCall ? (
-          <>
-            {isSpeaking && <p>🗣️ Speaking...</p>}
-            {isListening && !isSpeaking && <p>🎧 Listening...</p>}
-            {!isListening && !isSpeaking && <p>💬 Thinking...</p>}
-          </>
-        ) : (
-          <p>Press the mic to start talking</p>
-        )}
-      </div>
+            <div className="text-center">
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                isSpeaking ? 'bg-green-500/10 text-green-500' : 
+                isListening ? 'bg-blue-500/10 text-blue-500' : 
+                isInCall ? 'bg-yellow-500/10 text-yellow-500' : 
+                'bg-muted text-muted-foreground'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  isSpeaking ? 'bg-green-500 animate-pulse' : 
+                  isListening ? 'bg-blue-500 animate-pulse' : 
+                  isInCall ? 'bg-yellow-500' : 
+                  'bg-muted-foreground'
+                }`} />
+                <span className="font-medium text-sm">
+                  {isSpeaking ? 'Speaking' : isListening ? 'Listening' : isInCall ? 'On Call' : 'Ready to Call'}
+                </span>
+              </div>
+            </div>
+            
+            {currentMessage && (
+              <div className="p-4 bg-muted/50 rounded-lg min-h-[100px]">
+                <p className="text-sm text-foreground">
+                  {currentMessage}
+                </p>
+              </div>
+            )}
 
-      {/* 🧠 Conversation Log */}
-      <div className="mt-10 max-w-lg w-full bg-gray-900 p-4 rounded-2xl overflow-y-auto h-64">
-        {conversationHistory.map((m, i) => (
-          <p key={i} className="mb-2 text-sm">
-            <span className={m.role === "user" ? "text-blue-400" : "text-green-400"}>
-              {m.role}:
-            </span>{" "}
-            {m.content}
-          </p>
-        ))}
+            <div className="flex gap-4 justify-center">
+              {!isInCall ? (
+                <Button onClick={startCall} size="lg" className="bg-gradient-medical text-primary-foreground px-8">
+                  <Phone className="w-5 h-5 mr-2" />
+                  Start Voice Call
+                </Button>
+              ) : (
+                <Button onClick={endCall} variant="destructive" size="lg" className="px-8">
+                  <PhoneOff className="w-5 h-5 mr-2" />
+                  End Call
+                </Button>
+              )}
+            </div>
+            
+            <p className="text-sm text-muted-foreground text-center">
+              {isInCall 
+                ? "Speak naturally - Your companion is here to listen and talk with you" 
+                : "Start a voice call to have a natural conversation with your AI companion"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
