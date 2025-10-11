@@ -18,27 +18,22 @@ serve(async (req) => {
       throw new Error('No audio data provided');
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
+    const HF_TOKEN = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+    if (!HF_TOKEN) {
+      throw new Error('HUGGING_FACE_ACCESS_TOKEN not configured');
     }
 
     // Decode base64 audio
     const binaryAudio = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     
-    // Prepare form data
-    const formData = new FormData();
-    const blob = new Blob([binaryAudio], { type: 'audio/webm' });
-    formData.append('file', blob, 'audio.webm');
-    formData.append('model', 'whisper-1');
-
-    // Use OpenAI Whisper API for transcription
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    // Use Hugging Face Whisper model for transcription
+    const response = await fetch('https://api-inference.huggingface.co/models/openai/whisper-base', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${HF_TOKEN}`,
+        'Content-Type': 'audio/webm',
       },
-      body: formData,
+      body: binaryAudio,
     });
 
     if (!response.ok) {

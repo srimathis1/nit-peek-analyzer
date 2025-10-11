@@ -12,29 +12,26 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice } = await req.json();
+    const { text } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
+    const HF_TOKEN = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+    if (!HF_TOKEN) {
+      throw new Error('HUGGING_FACE_ACCESS_TOKEN not configured');
     }
 
-    // Generate speech from text using OpenAI TTS
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    // Generate speech from text using Hugging Face TTS
+    const response = await fetch('https://api-inference.huggingface.co/models/facebook/mms-tts-eng', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${HF_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'tts-1',
-        input: text,
-        voice: voice || 'nova',
-        response_format: 'mp3',
+        inputs: text,
       }),
     });
 
