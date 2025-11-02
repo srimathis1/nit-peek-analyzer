@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ExtractedMedication {
   name: string;
@@ -17,6 +18,7 @@ export const MedicationUpload = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -58,19 +60,54 @@ export const MedicationUpload = () => {
         console.log('Extracted medications:', data);
 
         if (data.medications && data.medications.length > 0) {
+          // Get current user
+          const { data: { user } } = await supabase.auth.getUser();
+          
+          if (!user) {
+            toast({
+              title: "Authentication Required",
+              description: "Please sign in to save medications.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Save medications to database
+          const medicationsToInsert = data.medications.map((med: ExtractedMedication) => ({
+            user_id: user.id,
+            name: med.name,
+            dosage: med.dosage,
+            frequency: med.frequency,
+            start_date: med.startDate,
+            times: [], // Will be set by user later
+            instructions: '',
+            remaining: 30,
+            total: 30
+          }));
+
+          const { error: insertError } = await supabase
+            .from('medications')
+            .insert(medicationsToInsert);
+
+          if (insertError) {
+            console.error('Error saving medications:', insertError);
+            throw insertError;
+          }
+
+          // Refresh the medications list
+          queryClient.invalidateQueries({ queryKey: ['medications'] });
+
           toast({
-            title: "Medications Extracted!",
-            description: `Found ${data.medications.length} medication(s). They will be added to your list.`,
+            title: "Success!",
+            description: `Added ${data.medications.length} medication(s) to your list.`,
           });
 
-          // Here you would typically save to a database
-          // For now, just show success
           setIsOpen(false);
           setImagePreview(null);
         } else {
           toast({
             title: "No Medications Found",
-            description: "Could not extract medication information from the image.",
+            description: "Could not extract medication information from the image. Please try again with a clearer photo.",
             variant: "destructive",
           });
         }
