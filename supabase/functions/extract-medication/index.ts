@@ -25,7 +25,7 @@ serve(async (req) => {
 
     console.log('Extracting medication info from image...');
 
-    // Use Lovable AI with vision model to extract medication information
+    // Use Lovable AI with better vision model to extract medication information
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -33,32 +33,28 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `You are a medication information extractor. Extract medication details from images of prescription labels or medication bottles.
-Return a JSON array of medications with this exact structure:
-{
-  "medications": [
-    {
-      "name": "medication name",
-      "dosage": "dosage amount (e.g., 10mg)",
-      "frequency": "how often to take (e.g., twice daily, once daily)",
-      "startDate": "YYYY-MM-DD format if visible, otherwise today's date"
-    }
-  ]
-}
+            content: `You are an expert medication information extractor. Carefully analyze images of prescription labels, medication bottles, pill containers, or prescription documents.
 
-If you cannot find clear medication information, return an empty medications array.
-Only extract information you can clearly read from the image.`
+IMPORTANT INSTRUCTIONS:
+1. Look for medication names (generic or brand names)
+2. Find dosage information (e.g., 10mg, 500mg, 5ml)
+3. Identify frequency (e.g., "once daily", "twice daily", "every 8 hours", "as needed")
+4. Check for dates if visible
+5. If the image shows handwritten prescriptions, typed labels, or printed text on bottles, extract all readable medication information
+6. Be thorough - even if text is slightly blurry, attempt to extract what you can read
+
+Return extracted medications using the function call. If you genuinely cannot find ANY medication information, return an empty array.`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Extract all medication information from this image.'
+                text: 'Please carefully examine this image and extract ALL medication information you can find. Look for medication names, dosages, frequencies, and any dates. Even if the image quality is not perfect, extract what you can clearly identify.'
               },
               {
                 type: 'image_url',
