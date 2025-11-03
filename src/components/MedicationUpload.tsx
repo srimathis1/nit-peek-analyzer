@@ -20,16 +20,23 @@ export const MedicationUpload = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Show preview
+    // Show preview only, don't process yet
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleProcessImage = async () => {
+    if (!imagePreview) return;
+
+    const file = document.querySelector<HTMLInputElement>('#file-upload')?.files?.[0];
+    if (!file) return;
 
     await processImage(file);
   };
@@ -143,22 +150,31 @@ export const MedicationUpload = () => {
         
         <div className="space-y-4">
           {imagePreview ? (
-            <div className="relative">
-              <img 
-                src={imagePreview} 
-                alt="Medication preview" 
-                className="w-full rounded-lg border"
-              />
+            <>
+              <div className="relative">
+                <img 
+                  src={imagePreview} 
+                  alt="Medication preview" 
+                  className="w-full rounded-lg border"
+                />
+                <Button
+                  size="icon"
+                  variant="destructive"
+                  className="absolute top-2 right-2"
+                  onClick={clearImage}
+                  disabled={isProcessing}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
               <Button
-                size="icon"
-                variant="destructive"
-                className="absolute top-2 right-2"
-                onClick={clearImage}
+                onClick={handleProcessImage}
                 disabled={isProcessing}
+                className="w-full"
               >
-                <X className="w-4 h-4" />
+                {isProcessing ? "Processing..." : "Extract Medication Info"}
               </Button>
-            </div>
+            </>
           ) : (
             <div className="border-2 border-dashed rounded-lg p-8 text-center">
               <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
