@@ -1,10 +1,35 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Bell, Moon, Volume2, Lock, User, Globe, HelpCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState({
+    medicationReminders: true,
+    appointmentReminders: true,
+    lowStockAlerts: true,
+    emailNotifications: false,
+    voiceEnabled: true,
+    autoResponse: true,
+    voiceFeedback: true,
+    darkMode: false,
+    compactView: false,
+    animations: true,
+    twoFactor: false,
+    autoLock: true,
+  });
+
+  const handleToggle = (key: string) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    toast({
+      title: "Settings Updated",
+      description: `${key.replace(/([A-Z])/g, ' $1').trim()} has been ${!settings[key] ? 'enabled' : 'disabled'}.`,
+    });
+  };
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div>
@@ -23,19 +48,35 @@ export default function Settings() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="medication-reminders">Medication Reminders</Label>
-              <Switch id="medication-reminders" defaultChecked />
+              <Switch 
+                id="medication-reminders" 
+                checked={settings.medicationReminders}
+                onCheckedChange={() => handleToggle('medicationReminders')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="appointment-reminders">Appointment Reminders</Label>
-              <Switch id="appointment-reminders" defaultChecked />
+              <Switch 
+                id="appointment-reminders" 
+                checked={settings.appointmentReminders}
+                onCheckedChange={() => handleToggle('appointmentReminders')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="low-stock-alerts">Low Stock Alerts</Label>
-              <Switch id="low-stock-alerts" defaultChecked />
+              <Switch 
+                id="low-stock-alerts" 
+                checked={settings.lowStockAlerts}
+                onCheckedChange={() => handleToggle('lowStockAlerts')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="email-notifications">Email Notifications</Label>
-              <Switch id="email-notifications" />
+              <Switch 
+                id="email-notifications" 
+                checked={settings.emailNotifications}
+                onCheckedChange={() => handleToggle('emailNotifications')}
+              />
             </div>
           </CardContent>
         </Card>
@@ -50,15 +91,27 @@ export default function Settings() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="voice-enabled">Enable Voice Companion</Label>
-              <Switch id="voice-enabled" defaultChecked />
+              <Switch 
+                id="voice-enabled" 
+                checked={settings.voiceEnabled}
+                onCheckedChange={() => handleToggle('voiceEnabled')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="auto-response">Auto Response</Label>
-              <Switch id="auto-response" defaultChecked />
+              <Switch 
+                id="auto-response" 
+                checked={settings.autoResponse}
+                onCheckedChange={() => handleToggle('autoResponse')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="voice-feedback">Voice Feedback</Label>
-              <Switch id="voice-feedback" defaultChecked />
+              <Switch 
+                id="voice-feedback" 
+                checked={settings.voiceFeedback}
+                onCheckedChange={() => handleToggle('voiceFeedback')}
+              />
             </div>
           </CardContent>
         </Card>
@@ -73,15 +126,27 @@ export default function Settings() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="dark-mode">Dark Mode</Label>
-              <Switch id="dark-mode" />
+              <Switch 
+                id="dark-mode" 
+                checked={settings.darkMode}
+                onCheckedChange={() => handleToggle('darkMode')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="compact-view">Compact View</Label>
-              <Switch id="compact-view" />
+              <Switch 
+                id="compact-view" 
+                checked={settings.compactView}
+                onCheckedChange={() => handleToggle('compactView')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="animations">Animations</Label>
-              <Switch id="animations" defaultChecked />
+              <Switch 
+                id="animations" 
+                checked={settings.animations}
+                onCheckedChange={() => handleToggle('animations')}
+              />
             </div>
           </CardContent>
         </Card>
@@ -96,13 +161,28 @@ export default function Settings() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="two-factor">Two-Factor Authentication</Label>
-              <Switch id="two-factor" />
+              <Switch 
+                id="two-factor" 
+                checked={settings.twoFactor}
+                onCheckedChange={() => handleToggle('twoFactor')}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="auto-lock">Auto-Lock</Label>
-              <Switch id="auto-lock" defaultChecked />
+              <Switch 
+                id="auto-lock" 
+                checked={settings.autoLock}
+                onCheckedChange={() => handleToggle('autoLock')}
+              />
             </div>
-            <Button variant="outline" className="w-full">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => toast({
+                title: "Password Change",
+                description: "Password change functionality will be available soon.",
+              })}
+            >
               Change Password
             </Button>
           </CardContent>

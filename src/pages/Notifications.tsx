@@ -3,11 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bell, Pill, Calendar, AlertTriangle, Check, Trash2, Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Notifications() {
+  const { toast } = useToast();
   const [filter, setFilter] = useState<"all" | "medication" | "appointment" | "alert">("all");
-
-  const notifications = [
+  const [notificationList, setNotificationList] = useState([
     {
       id: 1,
       type: "medication",
@@ -62,7 +63,41 @@ export default function Notifications() {
       read: false,
       priority: "medium"
     },
-  ];
+  ]);
+
+  const handleMarkAsRead = (id: number) => {
+    setNotificationList(prev => 
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
+    );
+    toast({
+      title: "Notification Marked as Read",
+      description: "The notification has been marked as read.",
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    setNotificationList(prev => prev.filter(n => n.id !== id));
+    toast({
+      title: "Notification Deleted",
+      description: "The notification has been removed.",
+    });
+  };
+
+  const handleMarkAllRead = () => {
+    setNotificationList(prev => prev.map(n => ({ ...n, read: true })));
+    toast({
+      title: "All Notifications Marked as Read",
+      description: "All notifications have been marked as read.",
+    });
+  };
+
+  const handleClearAll = () => {
+    setNotificationList([]);
+    toast({
+      title: "All Notifications Cleared",
+      description: "All notifications have been removed.",
+    });
+  };
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -91,10 +126,10 @@ export default function Notifications() {
   };
 
   const filteredNotifications = filter === "all" 
-    ? notifications 
-    : notifications.filter(n => n.type === filter);
+    ? notificationList 
+    : notificationList.filter(n => n.type === filter);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notificationList.filter(n => !n.read).length;
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -106,11 +141,21 @@ export default function Notifications() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleMarkAllRead}
+            disabled={unreadCount === 0}
+          >
             <Check className="w-4 h-4 mr-2" />
             Mark All Read
           </Button>
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleClearAll}
+            disabled={notificationList.length === 0}
+          >
             <Trash2 className="w-4 h-4 mr-2" />
             Clear All
           </Button>
@@ -189,11 +234,19 @@ export default function Notifications() {
                 </div>
                 <div className="flex gap-1">
                   {!notification.read && (
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleMarkAsRead(notification.id)}
+                    >
                       <Check className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleDelete(notification.id)}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
