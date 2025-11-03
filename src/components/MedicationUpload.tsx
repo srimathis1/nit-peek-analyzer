@@ -17,12 +17,15 @@ export const MedicationUpload = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    setSelectedFile(file);
 
     // Show preview only, don't process yet
     const reader = new FileReader();
@@ -33,12 +36,16 @@ export const MedicationUpload = () => {
   };
 
   const handleProcessImage = async () => {
-    if (!imagePreview) return;
+    if (!selectedFile) {
+      toast({
+        title: "No Image",
+        description: "Please select an image first.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const file = document.querySelector<HTMLInputElement>('#file-upload')?.files?.[0];
-    if (!file) return;
-
-    await processImage(file);
+    await processImage(selectedFile);
   };
 
   const processImage = async (file: File) => {
@@ -133,6 +140,7 @@ export const MedicationUpload = () => {
 
   const clearImage = () => {
     setImagePreview(null);
+    setSelectedFile(null);
   };
 
   return (
