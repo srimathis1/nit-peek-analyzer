@@ -4,9 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, Clock, MapPin, Phone, MessageSquare, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Appointments() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newAppointment, setNewAppointment] = useState({
+    patient: "",
+    date: "",
+    time: "",
+    type: "",
+    doctor: "",
+    location: ""
+  });
+  const { toast } = useToast();
 
   const appointments = [
     {
@@ -49,6 +62,37 @@ export default function Appointments() {
     apt.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleCreateAppointment = () => {
+    if (!newAppointment.patient || !newAppointment.date || !newAppointment.time) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: "Appointment Created",
+      description: `Appointment for ${newAppointment.patient} on ${newAppointment.date} at ${newAppointment.time} has been scheduled.`,
+    });
+    setDialogOpen(false);
+    setNewAppointment({ patient: "", date: "", time: "", type: "", doctor: "", location: "" });
+  };
+
+  const handleCall = (patient: string) => {
+    toast({
+      title: "Calling",
+      description: `Initiating call to ${patient}...`,
+    });
+  };
+
+  const handleMessage = (patient: string) => {
+    toast({
+      title: "Message",
+      description: `Opening message to ${patient}...`,
+    });
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -56,10 +100,81 @@ export default function Appointments() {
           <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
           <p className="text-sm text-muted-foreground">Manage patient appointments and schedules</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          New Appointment
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              New Appointment
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Schedule New Appointment</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="patient">Patient Name *</Label>
+                <Input
+                  id="patient"
+                  value={newAppointment.patient}
+                  onChange={(e) => setNewAppointment({...newAppointment, patient: e.target.value})}
+                  placeholder="Enter patient name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date *</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={newAppointment.date}
+                    onChange={(e) => setNewAppointment({...newAppointment, date: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time">Time *</Label>
+                  <Input
+                    id="time"
+                    type="time"
+                    value={newAppointment.time}
+                    onChange={(e) => setNewAppointment({...newAppointment, time: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="type">Appointment Type</Label>
+                <Input
+                  id="type"
+                  value={newAppointment.type}
+                  onChange={(e) => setNewAppointment({...newAppointment, type: e.target.value})}
+                  placeholder="e.g., Routine Checkup"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="doctor">Doctor</Label>
+                <Input
+                  id="doctor"
+                  value={newAppointment.doctor}
+                  onChange={(e) => setNewAppointment({...newAppointment, doctor: e.target.value})}
+                  placeholder="e.g., Dr. Smith"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={newAppointment.location}
+                  onChange={(e) => setNewAppointment({...newAppointment, location: e.target.value})}
+                  placeholder="e.g., Main Clinic - Room 203"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleCreateAppointment}>Create Appointment</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="relative">
@@ -108,11 +223,11 @@ export default function Appointments() {
 
               {appointment.status === "upcoming" && (
                 <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleCall(appointment.patient)}>
                     <Phone className="w-4 h-4 mr-2" />
                     Call
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleMessage(appointment.patient)}>
                     <MessageSquare className="w-4 h-4 mr-2" />
                     Message
                   </Button>

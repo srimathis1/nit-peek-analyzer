@@ -9,11 +9,25 @@ import { useVoiceReminder } from "@/hooks/useVoiceReminder";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function Medications() {
   const { toast } = useToast();
   const { scheduleReminders, cancelReminders } = useVoiceReminder();
   const [enabledReminders, setEnabledReminders] = useState<Record<string, boolean>>({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newMedication, setNewMedication] = useState({
+    name: "",
+    dosage: "",
+    frequency: "",
+    times: "",
+    instructions: "",
+    remaining: "",
+    total: ""
+  });
 
   // Fetch medications from database
   const { data: medications = [], isLoading } = useQuery({
@@ -96,6 +110,59 @@ export default function Medications() {
   const dueToday = medications.filter(m => m.times && m.times.length > 0).length;
   const lowStock = medications.filter(m => m.remaining < 10).length;
 
+  const handleAddMedication = async () => {
+    if (!newMedication.name || !newMedication.dosage) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in medication name and dosage.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to add medications.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timesArray = newMedication.times ? newMedication.times.split(',').map(t => t.trim()) : [];
+    
+    const { error } = await supabase.from('medications').insert({
+      user_id: user.id,
+      name: newMedication.name,
+      dosage: newMedication.dosage,
+      frequency: newMedication.frequency || 'As needed',
+      times: timesArray,
+      instructions: newMedication.instructions,
+      remaining: parseInt(newMedication.remaining) || 30,
+      total: parseInt(newMedication.total) || 30,
+      start_date: new Date().toISOString().split('T')[0]
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add medication.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Medication Added",
+      description: `${newMedication.name} has been added successfully.`,
+    });
+    
+    setDialogOpen(false);
+    setNewMedication({ name: "", dosage: "", frequency: "", times: "", instructions: "", remaining: "", total: "" });
+    window.location.reload();
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -111,10 +178,93 @@ export default function Medications() {
           <h1 className="text-2xl font-bold text-foreground">Medications</h1>
           <p className="text-sm text-muted-foreground">Track and manage patient medications</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Add Medication
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add Medication
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Medication</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+              <div className="space-y-2">
+                <Label htmlFor="name">Medication Name *</Label>
+                <Input
+                  id="name"
+                  value={newMedication.name}
+                  onChange={(e) => setNewMedication({...newMedication, name: e.target.value})}
+                  placeholder="e.g., Aspirin"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dosage">Dosage *</Label>
+                <Input
+                  id="dosage"
+                  value={newMedication.dosage}
+                  onChange={(e) => setNewMedication({...newMedication, dosage: e.target.value})}
+                  placeholder="e.g., 100mg"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="frequency">Frequency</Label>
+                <Input
+                  id="frequency"
+                  value={newMedication.frequency}
+                  onChange={(e) => setNewMedication({...newMedication, frequency: e.target.value})}
+                  placeholder="e.g., Twice daily"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="times">Times (comma-separated)</Label>
+                <Input
+                  id="times"
+                  value={newMedication.times}
+                  onChange={(e) => setNewMedication({...newMedication, times: e.target.value})}
+                  placeholder="e.g., 8:00 AM, 8:00 PM"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="remaining">Remaining Pills</Label>
+                  <Input
+                    id="remaining"
+                    type="number"
+                    value={newMedication.remaining}
+                    onChange={(e) => setNewMedication({...newMedication, remaining: e.target.value})}
+                    placeholder="30"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="total">Total Pills</Label>
+                  <Input
+                    id="total"
+                    type="number"
+                    value={newMedication.total}
+                    onChange={(e) => setNewMedication({...newMedication, total: e.target.value})}
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instructions">Instructions</Label>
+                <Textarea
+                  id="instructions"
+                  value={newMedication.instructions}
+                  onChange={(e) => setNewMedication({...newMedication, instructions: e.target.value})}
+                  placeholder="e.g., Take with food"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleAddMedication}>Add Medication</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
