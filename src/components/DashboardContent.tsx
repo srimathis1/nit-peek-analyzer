@@ -1,9 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Calendar, Clock, Pill, Users, AlertTriangle, Mic, Camera } from "lucide-react";
+import { Calendar, Clock, Pill, Users, AlertTriangle, Mic, Camera, Trash2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export const DashboardContent = () => {
+  const { toast } = useToast();
+  
   const todayAppointments = [
     { 
       id: 1, 
@@ -13,24 +18,50 @@ export const DashboardContent = () => {
     },
   ];
 
-  const medications = [
-    { 
-      medication: "Lisinopril", 
-      dosage: "10mg",
-      times: "08:00, 20:00",
-      nextDose: "8:00 PM",
-      remaining: 25,
-      instructions: "Take with food"
-    },
-    { 
-      medication: "Metformin", 
-      dosage: "500mg",
-      times: "08:00, 12:00, 18:00",
-      nextDose: "6:00 PM",
-      remaining: 30,
-      instructions: "Take with meals"
-    },
-  ];
+  // Fetch medications from database
+  const { data: medications = [] } = useQuery({
+    queryKey: ['medications'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('medications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching medications:', error);
+        return [];
+      }
+
+      return data || [];
+    }
+  });
+
+  const handleDeleteMedication = async (medicationId: string, medicationName: string) => {
+    const { error } = await supabase
+      .from('medications')
+      .delete()
+      .eq('id', medicationId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete medication.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Medication Deleted",
+      description: `${medicationName} has been removed.`,
+    });
+    
+    window.location.reload();
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -149,50 +180,59 @@ export const DashboardContent = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {medications.map((med, index) => (
-              <div key={index} className="p-4 rounded-lg bg-muted/50 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-medium flex items-center gap-2">
-                      <Pill className="w-4 h-4 text-primary" />
-                      {med.medication}
-                    </h4>
-                    <p className="text-sm text-muted-foreground mt-1">Dosage: <span className="font-medium">{med.dosage}</span></p>
-                    <p className="text-sm text-muted-foreground">{med.instructions}</p>
-                  </div>
-                  <span className="text-lg font-semibold">{med.dosage}</span>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Times:</span>
-                    <span className="font-medium">{med.times}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Next dose:</span>
-                    <span className="font-medium text-primary">{med.nextDose}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Remaining:</span>
-                      <span className="font-medium">{med.remaining} pills</span>
+            {medications.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No medications found</p>
+            ) : (
+              medications.map((med) => (
+                <div key={med.id} className="p-4 rounded-lg bg-muted/50 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-medium flex items-center gap-2">
+                        <Pill className="w-4 h-4 text-primary" />
+                        {med.name}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mt-1">Dosage: <span className="font-medium">{med.dosage}</span></p>
+                      <p className="text-sm text-muted-foreground">{med.instructions}</p>
                     </div>
-                    <Progress value={(med.remaining / 30) * 100} className="h-2" />
+                    <span className="text-lg font-semibold">{med.dosage}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {med.times && med.times.length > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Times:</span>
+                        <span className="font-medium">{med.times.join(", ")}</span>
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Remaining:</span>
+                        <span className="font-medium">{med.remaining} pills</span>
+                      </div>
+                      <Progress value={(med.remaining / med.total) * 100} className="h-2" />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button size="sm" variant="outline" className="flex-1">
+                      <Mic className="w-4 h-4 mr-2" />
+                      Voice Reminder
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1">
+                      <Camera className="w-4 h-4 mr-2" />
+                      Upload Photo
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDeleteMedication(med.id, med.name)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1">
-                    <Mic className="w-4 h-4 mr-2" />
-                    Voice Reminder
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1">
-                    <Camera className="w-4 h-4 mr-2" />
-                    Upload Photo
-                  </Button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pill, Clock, AlertCircle, Plus, Mic } from "lucide-react";
+import { Pill, Clock, AlertCircle, Plus, Mic, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MedicationUpload } from "@/components/MedicationUpload";
 import { useState } from "react";
@@ -109,6 +109,29 @@ export default function Medications() {
   const activeCount = medications.length;
   const dueToday = medications.filter(m => m.times && m.times.length > 0).length;
   const lowStock = medications.filter(m => m.remaining < 10).length;
+
+  const handleDeleteMedication = async (medicationId: string, medicationName: string) => {
+    const { error } = await supabase
+      .from('medications')
+      .delete()
+      .eq('id', medicationId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete medication.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Medication Deleted",
+      description: `${medicationName} has been removed.`,
+    });
+    
+    window.location.reload();
+  };
 
   const handleAddMedication = async () => {
     if (!newMedication.name || !newMedication.dosage) {
@@ -389,6 +412,13 @@ export default function Medications() {
                     {enabledReminders[med.id] ? "Disable Voice Reminder" : "Enable Voice Reminder"}
                   </Button>
                   <MedicationUpload />
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDeleteMedication(med.id, med.name)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
