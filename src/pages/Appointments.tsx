@@ -19,9 +19,7 @@ export default function Appointments() {
     doctor: "",
     location: ""
   });
-  const { toast } = useToast();
-
-  const appointments = [
+  const [appointments, setAppointments] = useState([
     {
       id: 1,
       patient: "Margaret Johnson",
@@ -55,7 +53,8 @@ export default function Appointments() {
       status: "completed",
       duration: "20 mins"
     },
-  ];
+  ]);
+  const { toast } = useToast();
 
   const filteredAppointments = appointments.filter(apt =>
     apt.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -71,9 +70,31 @@ export default function Appointments() {
       });
       return;
     }
+
+    const newId = Math.max(...appointments.map(a => a.id), 0) + 1;
+    const formattedTime = new Date(`2000-01-01T${newAppointment.time}`).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+
+    const appointmentToAdd = {
+      id: newId,
+      patient: newAppointment.patient,
+      date: newAppointment.date,
+      time: formattedTime,
+      type: newAppointment.type || "General Appointment",
+      doctor: newAppointment.doctor || "TBD",
+      location: newAppointment.location || "TBD",
+      status: "upcoming" as const,
+      duration: "30 mins"
+    };
+
+    setAppointments([...appointments, appointmentToAdd]);
+    
     toast({
       title: "Appointment Created",
-      description: `Appointment for ${newAppointment.patient} on ${newAppointment.date} at ${newAppointment.time} has been scheduled.`,
+      description: `Appointment for ${newAppointment.patient} on ${newAppointment.date} at ${formattedTime} has been scheduled.`,
     });
     setDialogOpen(false);
     setNewAppointment({ patient: "", date: "", time: "", type: "", doctor: "", location: "" });
