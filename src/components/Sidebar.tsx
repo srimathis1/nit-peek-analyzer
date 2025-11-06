@@ -10,17 +10,16 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, badge: 0 },
-  { title: "Voice Assistant", url: "/voice-assistant", icon: Phone, badge: 0 },
-  { title: "Smart Health", url: "/ai-insights", icon: Mic, badge: 0 },
-  { title: "Appointments", url: "/appointments", icon: Calendar, badge: 3 },
-  { title: "Medications", url: "/medications", icon: Pill, badge: 2 },
-  { title: "Patient Profile", url: "/profile", icon: User, badge: 0 },
-  { title: "Notifications", url: "/notifications", icon: Bell, badge: 5 },
-  { title: "Settings", url: "/settings", icon: Settings, badge: 0 },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Voice Assistant", url: "/voice-assistant", icon: Phone },
+  { title: "Smart Health", url: "/ai-insights", icon: Mic },
+  { title: "Appointments", url: "/appointments", icon: Calendar },
+  { title: "Medications", url: "/medications", icon: Pill },
+  { title: "Patient Profile", url: "/profile", icon: User },
+  { title: "Notifications", url: "/notifications", icon: Bell },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -60,14 +59,7 @@ export function AppSidebar() {
                     >
                       <item.icon className="w-5 h-5 flex-shrink-0" />
                       {!isCollapsed && (
-                        <>
-                          <span className="flex-1">{item.title}</span>
-                          {item.badge > 0 && (
-                            <Badge variant="destructive" className="ml-auto">
-                              {item.badge}
-                            </Badge>
-                          )}
-                        </>
+                        <span className="flex-1">{item.title}</span>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
