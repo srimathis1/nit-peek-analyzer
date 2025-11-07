@@ -17,7 +17,8 @@ export default function Appointments() {
     time: "",
     type: "",
     doctor: "",
-    location: ""
+    location: "",
+    phone: ""
   });
   const [appointments, setAppointments] = useState([
     {
@@ -29,7 +30,8 @@ export default function Appointments() {
       doctor: "Dr. Sarah Williams",
       location: "Main Clinic - Room 203",
       status: "upcoming",
-      duration: "30 mins"
+      duration: "30 mins",
+      phone: "+1234567890"
     },
     {
       id: 2,
@@ -40,7 +42,8 @@ export default function Appointments() {
       doctor: "Dr. Michael Chen",
       location: "Cardiology Wing",
       status: "upcoming",
-      duration: "45 mins"
+      duration: "45 mins",
+      phone: "+1987654321"
     },
     {
       id: 3,
@@ -51,7 +54,8 @@ export default function Appointments() {
       doctor: "Dr. Sarah Williams",
       location: "Laboratory",
       status: "completed",
-      duration: "20 mins"
+      duration: "20 mins",
+      phone: "+1234567890"
     },
   ]);
   const { toast } = useToast();
@@ -87,7 +91,8 @@ export default function Appointments() {
       doctor: newAppointment.doctor || "TBD",
       location: newAppointment.location || "TBD",
       status: "upcoming" as const,
-      duration: "30 mins"
+      duration: "30 mins",
+      phone: newAppointment.phone || ""
     };
 
     setAppointments([...appointments, appointmentToAdd]);
@@ -97,14 +102,19 @@ export default function Appointments() {
       description: `Appointment for ${newAppointment.patient} on ${newAppointment.date} at ${formattedTime} has been scheduled.`,
     });
     setDialogOpen(false);
-    setNewAppointment({ patient: "", date: "", time: "", type: "", doctor: "", location: "" });
+    setNewAppointment({ patient: "", date: "", time: "", type: "", doctor: "", location: "", phone: "" });
   };
 
-  const handleCall = (patient: string) => {
-    toast({
-      title: "Calling",
-      description: `Initiating call to ${patient}...`,
-    });
+  const handleCall = (phone: string, patient: string) => {
+    if (!phone) {
+      toast({
+        title: "No Phone Number",
+        description: `No phone number available for ${patient}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    window.location.href = `tel:${phone}`;
   };
 
   const handleMessage = (patient: string) => {
@@ -189,6 +199,16 @@ export default function Appointments() {
                   placeholder="e.g., Main Clinic - Room 203"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={newAppointment.phone}
+                  onChange={(e) => setNewAppointment({...newAppointment, phone: e.target.value})}
+                  placeholder="e.g., +1234567890"
+                />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -244,7 +264,7 @@ export default function Appointments() {
 
               {appointment.status === "upcoming" && (
                 <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleCall(appointment.patient)}>
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleCall(appointment.phone, appointment.patient)}>
                     <Phone className="w-4 h-4 mr-2" />
                     Call
                   </Button>
