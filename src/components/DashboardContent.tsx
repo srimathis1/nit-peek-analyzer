@@ -5,9 +5,13 @@ import { Calendar, Clock, Pill, Users, AlertTriangle, Mic, Camera, Trash2 } from
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useVoiceReminder } from "@/hooks/useVoiceReminder";
+import { useMemo, useState } from "react";
 
 export const DashboardContent = () => {
   const { toast } = useToast();
+  const { scheduleReminders, cancelReminders } = useVoiceReminder();
+  const [enabledReminders, setEnabledReminders] = useState<Set<string>>(new Set());
   
   const todayAppointments = [
     { 
@@ -39,6 +43,63 @@ export const DashboardContent = () => {
       return data || [];
     }
   });
+
+  // Calculate dynamic stats
+  const stats = useMemo(() => {
+    const activeMeds = medications.length;
+    const lowStockMeds = medications.filter(m => (m.remaining / m.total) < 0.3).length;
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const dueToday = medications.filter(m => m.frequency?.toLowerCase().includes(today.toLowerCase())).length;
+    
+    return {
+      activeMeds,
+      lowStockMeds,
+      dueToday,
+      upcomingAppointments: todayAppointments.length
+    };
+  }, [medications]);
+
+  const parseTimeToDate = (timeStr: string) => {
+    const [time, period] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  };
+
+  const scheduleForMedication = (medication: any) => {
+    if (!medication.times || medication.times.length === 0) return;
+    const reminders = medication.times.map((time: string) => ({
+      at: parseTimeToDate(time),
+      message: `Time to take your ${medication.name} - ${medication.dosage}`
+    }));
+    scheduleReminders(reminders, medication.id);
+  };
+
+  const handleToggleVoiceReminder = (medication: any) => {
+    const medId = medication.id;
+    if (enabledReminders.has(medId)) {
+      cancelReminders(medId);
+      setEnabledReminders(prev => {
+        const next = new Set(prev);
+        next.delete(medId);
+        return next;
+      });
+      toast({
+        title: "Voice Reminders Disabled",
+        description: `Voice reminders for ${medication.name} have been turned off.`
+      });
+    } else {
+      scheduleForMedication(medication);
+      setEnabledReminders(prev => new Set(prev).add(medId));
+      toast({
+        title: "Voice Reminders Enabled",
+        description: `Voice reminders scheduled for ${medication.name} at ${medication.times?.join(', ') || 'scheduled times'}.`
+      });
+    }
+  };
 
   const handleDeleteMedication = async (medicationId: string, medicationName: string) => {
     const { error } = await supabase
@@ -89,8 +150,10 @@ export const DashboardContent = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Upcoming Appointments</p>
-                <p className="text-3xl font-bold text-foreground">0</p>
-                <p className="text-xs text-muted-foreground mt-1">Next: Today 2:00 PM</p>
+                <p className="text-3xl font-bold text-foreground">{stats.upcomingAppointments}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.upcomingAppointments > 0 ? "Next: Today 2:00 PM" : "No appointments"}
+                </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Calendar className="w-6 h-6 text-primary" />
@@ -104,8 +167,8 @@ export const DashboardContent = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Active Medications</p>
-                <p className="text-3xl font-bold text-foreground">5</p>
-                <p className="text-xs text-muted-foreground mt-1">2 due today</p>
+                <p className="text-3xl font-bold text-foreground">{stats.activeMeds}</p>
+                <p className="text-xs text-muted-foreground mt-1">{stats.dueToday} due today</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center">
                 <Pill className="w-6 h-6 text-secondary" />
@@ -118,12 +181,12 @@ export const DashboardContent = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Patients</p>
-                <p className="text-3xl font-bold text-foreground">2</p>
-                <p className="text-xs text-muted-foreground mt-1">Active care plans</p>
+                <p className="text-sm text-muted-foreground">Low Stock</p>
+                <p className="text-3xl font-bold text-foreground">{stats.lowStockMeds}</p>
+                <p className="text-xs text-muted-foreground mt-1">Medications low on pills</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
-                <Users className="w-6 h-6 text-accent" />
+                <AlertTriangle className="w-6 h-6 text-accent" />
               </div>
             </div>
           </CardContent>
@@ -133,12 +196,12 @@ export const DashboardContent = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Pending Alerts</p>
-                <p className="text-3xl font-bold text-foreground">2</p>
-                <p className="text-xs text-muted-foreground mt-1">Medication reminders</p>
+                <p className="text-sm text-muted-foreground">Voice Reminders</p>
+                <p className="text-3xl font-bold text-foreground">{enabledReminders.size}</p>
+                <p className="text-xs text-muted-foreground mt-1">Active reminders</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-warning" />
+                <Mic className="w-6 h-6 text-warning" />
               </div>
             </div>
           </CardContent>
@@ -214,13 +277,14 @@ export const DashboardContent = () => {
                   </div>
 
                   <div className="flex gap-2 pt-2">
-                    <Button size="sm" variant="outline" className="flex-1">
+                    <Button 
+                      size="sm" 
+                      variant={enabledReminders.has(med.id) ? "default" : "outline"}
+                      className="flex-1"
+                      onClick={() => handleToggleVoiceReminder(med)}
+                    >
                       <Mic className="w-4 h-4 mr-2" />
-                      Voice Reminder
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1">
-                      <Camera className="w-4 h-4 mr-2" />
-                      Upload Photo
+                      {enabledReminders.has(med.id) ? "Reminder On" : "Voice Reminder"}
                     </Button>
                     <Button
                       size="sm"
