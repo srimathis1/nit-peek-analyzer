@@ -8,19 +8,19 @@ import { useToast } from "@/hooks/use-toast";
 import { useVoiceReminder } from "@/hooks/useVoiceReminder";
 import { useMemo, useState } from "react";
 
+const todayAppointments = [
+  { 
+    id: 1, 
+    patient: "Margaret Johnson", 
+    time: "02:00 PM", 
+    type: "Routine Checkup"
+  },
+];
+
 export const DashboardContent = () => {
   const { toast } = useToast();
   const { scheduleReminders, cancelReminders } = useVoiceReminder();
   const [enabledReminders, setEnabledReminders] = useState<Set<string>>(new Set());
-  
-  const todayAppointments = [
-    { 
-      id: 1, 
-      patient: "Margaret Johnson", 
-      time: "02:00 PM", 
-      type: "Routine Checkup"
-    },
-  ];
 
   // Fetch medications from database
   const { data: medications = [] } = useQuery({
