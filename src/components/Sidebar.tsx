@@ -1,5 +1,5 @@
-import { Calendar, Pill, User, Bell, Settings, LayoutDashboard, Mic, Phone } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { Calendar, Pill, User, Bell, Settings, LayoutDashboard, Mic, Phone, LogOut } from "lucide-react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -9,7 +9,11 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   useSidebar,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -25,6 +29,21 @@ const navItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Error signing out",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      navigate("/auth");
+    }
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border bg-card">
@@ -69,6 +88,17 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      
+      <SidebarFooter className="p-4 border-t border-border">
+        <Button
+          variant="outline"
+          className="w-full justify-start gap-3"
+          onClick={handleSignOut}
+        >
+          <LogOut className="w-5 h-5" />
+          {!isCollapsed && <span>Sign Out</span>}
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   );
 }
